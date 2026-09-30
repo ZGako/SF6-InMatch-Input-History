@@ -1,0 +1,19 @@
+# Core .NET build output folders
+[Bb]in/
+[Oo]bj/
+
+# VS Code / Visual Studio hidden folders
+.vscode/
+.vs/
+*.user
+
+# Ignore all DLLs and compiled binaries globally 
+*.dll
+*.exe
+*.pdb
+
+libs/**
+
+.editorconfig
+
+.continue/

@@ -1,0 +1,1 @@
+SF6 C# Plugin mod for having the Input History display be enabled outside of training mode (i.e. ranked, custom room, etc...)
