@@ -11,7 +11,6 @@ partial class InputHistoryClass : IDisposable
 
     public InputHistoryClass()
     {
-        // Initialize the view and controller
         _gameObjectMo = UIPrefabFactory.CreateUIPrefab("Product/GUI/gm/ui11200/ui11254/ui11254.pfb");
 
         var uiAgentComponent = _gameObjectMo.As<via.GameObject>()?.getComponent(app.UIAgent.REFType.RuntimeType.As<_System.Type>());
@@ -22,11 +21,8 @@ partial class InputHistoryClass : IDisposable
             throw new InvalidOperationException("Failed to retrieve UIAgent from the instantiated prefab.");
         }
 
-
         _view = new InputHistoryView(this, uiAgent);
         _controller = new InputHistoryController(this);
-
-        // Additional initialization logic can go here
     }
 
     public void Dispose()
@@ -34,5 +30,6 @@ partial class InputHistoryClass : IDisposable
         _controller.Dispose();
         _view.Dispose();
         via.GameObject.destroy(_gameObjectMo?.As<via.GameObject>());
+        _gameObjectMo?.ReleaseIfGlobalized();
     }
 }

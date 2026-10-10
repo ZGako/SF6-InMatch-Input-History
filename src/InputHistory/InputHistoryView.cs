@@ -1,17 +1,17 @@
-
-using SF6_Plugin_Core;
+using SF6_Plugin_Core.Memory;
 using SF6_Plugin_Core.UI;
 
 
 namespace SF6_MIH.InputHistory;
 
+//FIXME: refactor
 partial class InputHistoryClass
 {
     // write the view part of the class (maybe an internal class?)
     private class InputHistoryView : IDisposable
     {
 
-        private readonly EngineStringTracker _engineStringTracker = new();
+        private readonly EngineStringPool _engineStringPool = new();
 
         private readonly InputHistoryClass _parent;
 
@@ -29,8 +29,8 @@ partial class InputHistoryClass
         private readonly via.gui.Text _firstRightItemText;
 
         // head versioning for each player, for when the input doesn't change and we need to +1 the current frame count
-        private uint _p1HeadVersion = 0;
-        private uint _p2HeadVersion = 0;
+        private uint _p1HeadVersion = 1;
+        private uint _p2HeadVersion = 1;
 
         // shift versioning for each player, for when the input changes and we shift down the history
         private uint _p1ShiftVersion = 0;
@@ -130,7 +130,7 @@ partial class InputHistoryClass
                     try
                     {
                         string prevMessage = previousText.Message ?? "";
-                        _engineStringTracker.AssignText(currentText, prevMessage, (str) => (currentText as IObject)?.Call("set_Message", str));
+                        (currentText as IObject)?.Call("set_Message", _engineStringPool.GetOrCreate(prevMessage));
                     }
                     catch (Exception ex)
                     {
@@ -183,9 +183,9 @@ partial class InputHistoryClass
 
             var buttonText = UIHelpers.GetGuiChild(selectItem, "e_text_right").As<via.gui.Text>();
 
-            _engineStringTracker.AssignText(frameText, "1", (str) => (frameText as IObject)?.Call("set_Message", str));
-            _engineStringTracker.AssignText(directionText, ParseInputDirection(inputValue), (str) => (directionText as IObject)?.Call("set_Message", str));
-            _engineStringTracker.AssignText(buttonText, ParseInputButtons(inputValue), (str) => (buttonText as IObject)?.Call("set_Message", str));
+            (frameText as IObject)?.Call("set_Message", _engineStringPool.GetOrCreate("1"));
+            (directionText as IObject)?.Call("set_Message", _engineStringPool.GetOrCreate(ParseInputDirection(inputValue)));
+            (buttonText as IObject)?.Call("set_Message", _engineStringPool.GetOrCreate(ParseInputButtons(inputValue)));
         }
 
         public void UpdateUI()
@@ -196,7 +196,7 @@ partial class InputHistoryClass
             {
                 // update the left side UI
                 var p1Head = controller.GetP1InputHistory(0);
-                _engineStringTracker.AssignText(_firstLeftItemText, $"{p1Head.FrameCount}", (str) => (_firstLeftItemText as IObject)?.Call("set_Message", str));
+                (_firstLeftItemText as IObject)?.Call("set_Message", _engineStringPool.GetOrCreate($"{p1Head.FrameCount}"));
                 _p1HeadVersion = controller.P1HeadVersion;
             }
 
@@ -204,7 +204,7 @@ partial class InputHistoryClass
             {
                 // update the right side UI
                 var p2Head = controller.GetP2InputHistory(0);
-                _engineStringTracker.AssignText(_firstRightItemText, $"{p2Head.FrameCount}", (str) => (_firstRightItemText as IObject)?.Call("set_Message", str));
+                (_firstRightItemText as IObject)?.Call("set_Message", _engineStringPool.GetOrCreate($"{p2Head.FrameCount}"));
                 _p2HeadVersion = controller.P2HeadVersion;
             }
 
@@ -236,7 +236,7 @@ partial class InputHistoryClass
             _uiStateManager._Curt = hideState.As<app.UIStateBase>();
             _uiStateManager._Next = hideState.As<app.UIStateBase>();
 
-            _engineStringTracker.Clear();
+            _engineStringPool.Dispose();
         }
     }
 }

@@ -2,9 +2,9 @@
 
 namespace SF6_MIH.InputHistory;
 
+//FIXME: refactor
 partial class InputHistoryClass
 {
-    // write the controller part of the class (maybe an internal class?)
     private class InputHistoryController : IDisposable
     {
         private static InputHistoryController? s_instance;
@@ -109,9 +109,6 @@ partial class InputHistoryClass
             s_instance = this;
         }
 
-
-
-        // [Callback(typeof(UpdateGUI), CallbackType.Pre)]
         [Callback(typeof(LateUpdateBehavior), CallbackType.Post)]
         public static void OnUpdateBehaviorCallback()
         {
@@ -165,7 +162,14 @@ partial class InputHistoryClass
                 GetInputFromNewest(s_instance._p2InputBuffer, s_instance._p2HeadIndex, 0).InputValue = p2_input_new;
             }
 
-            s_instance._parent._view.UpdateUI();
+            try
+            {
+                s_instance._parent._view.UpdateUI();
+            }
+            catch (Exception ex)
+            {
+                API.LogError($"Error updating input history UI: {ex.Message}");
+            }
         }
 
         private void ResetHistory()
