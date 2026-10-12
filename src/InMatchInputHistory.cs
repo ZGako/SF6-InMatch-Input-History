@@ -37,11 +37,11 @@ public static class InMatchInputHistory
         API.LogLevel = 0;
         API.LogInfo("Loading InMatchInputHistory C# plugin...");
 
+        GameSingletonRegistry.RegisterBFlowManager(onReady: RegisterGuiHudCallback);
+
         GameSingletonRegistry.RegisterUIAgentManager(onReady: RegisterGuiHudCallback);
 
         GameSingletonRegistry.RegisterResourceManager(onReady: RegisterGuiHudCallback);
-
-        GameSingletonRegistry.RegisterBFlowManager(onReady: () => { });
     }
 
     // NoInlining necessary for dynamic assembly resolution
@@ -64,14 +64,12 @@ public static class InMatchInputHistory
 
     private static void RegisterGuiHudCallback()
     {
-        if (GameSingletonRegistry.UIAgentManager != null && GameSingletonRegistry.ResourceManager != null)
+        if (GameSingletonRegistry.UIAgentManager != null && GameSingletonRegistry.ResourceManager != null && GameSingletonRegistry.BFlowManager != null)
         {
             GameSingletonRegistry.RegisterGuiManager(onReady: () =>
             {
-                // FlowTransitionDispatcher.RegisterGameModeFlowTransition(app.EGameMode.TRAINING, EnteringMatch, ExitingMatch);
-                // FlowTransitionDispatcher.RegisterGameModeFlowTransition(app.EGameMode.VERSUS_2P, EnteringMatch, ExitingMatch);
+                //TODO: add part of the config here maybe?
                 BattleHudDispatcher.RegisterBattleHudSetupCallbacks(OnHudSetup, UnloadingHud);
-
             });
         }
     }
@@ -84,27 +82,35 @@ public static class InMatchInputHistory
             return; // BFlowManager is not ready yet, exit early
         }
 
-        var flowWork = GameSingletonRegistry.BFlowManager.m_flow_work;
-
-        var flowMap = flowWork.FlowMap;
-
-        if (flowMap is not IObject flowObj || !flowObj.GetTypeDefinition().IsDerivedFrom(app.battle.BattleFlowMap.REFType))
+        try
         {
-            return; // FlowMap is not a BattleFlowMap, exit early
+            var flowWork = GameSingletonRegistry.BFlowManager.m_flow_work;
+
+            var flowMap = flowWork.FlowMap;
+
+            if (flowMap is not IObject flowObj || !flowObj.GetTypeDefinition().IsDerivedFrom(app.battle.BattleFlowMap.REFType))
+            {
+                return; // FlowMap is not a BattleFlowMap, exit early
+            }
+
+            var battleFlowMap = ManagedProxy<app.battle.BattleFlowMap>.Create(flowMap);
+
+            if (battleFlowMap == null)
+            {
+                return; // Failed to create ManagedProxy for BattleFlowMap, exit early
+            }
+
+            var gameMode = battleFlowMap.m_desc.Rule.GameMode;
+
+            if (gameMode != app.EGameMode.TRAINING && gameMode != app.EGameMode.VERSUS_2P)
+            {
+                return;
+            }
         }
-
-        var battleFlowMap = ManagedProxy<app.battle.BattleFlowMap>.Create(flowMap);
-
-        if (battleFlowMap == null)
+        catch (Exception ex)
         {
-            return; // Failed to create ManagedProxy for BattleFlowMap, exit early
-        }
-
-        var gameMode = battleFlowMap.m_desc.Rule.GameMode;
-
-        if (gameMode != app.EGameMode.TRAINING && gameMode != app.EGameMode.VERSUS_2P)
-        {
-            return;
+            API.LogError($"Exception during OnHudSetup: {ex}");
+            return; // Exit early on exception
         }
 
         s_inputHistoryModule?.Dispose();

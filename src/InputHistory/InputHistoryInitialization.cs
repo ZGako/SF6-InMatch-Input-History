@@ -32,27 +32,9 @@ partial class InputHistoryClass : IDisposable
         _gameObjectMo = prefabMo;
 
         var uiAgentComponent = _gameObjectMo.As<via.GameObject>()?.getComponent(app.UIAgent.REFType.RuntimeType.As<_System.Type>());
-        var uiAgent = ManagedProxy<app.UIAgent>.Create(uiAgentComponent);
-
-        if (uiAgent == null)
-        {
-            throw new InvalidOperationException("Failed to retrieve UIAgent from the instantiated prefab.");
-        }
-
-        BattleHudDispatcher.RegisterBattleHudActivationCallbacks(Show, Hide);
-
+        var uiAgent = ManagedProxy<app.UIAgent>.Create(uiAgentComponent) ?? throw new InvalidOperationException("Failed to retrieve UIAgent from the instantiated prefab.");
         _view = new InputHistoryView(this, uiAgent);
         _controller = new InputHistoryController(this);
-    }
-
-    private void Show(app.BattleHudManager _)
-    {
-        API.LogInfo("Showing InMatchInputHistory UI.");
-    }
-
-    private void Hide()
-    {
-        API.LogInfo("Hiding InMatchInputHistory UI.");
     }
 
     public void Dispose()
@@ -62,7 +44,5 @@ partial class InputHistoryClass : IDisposable
         _view?.Dispose();
         via.GameObject.destroy(_gameObjectMo?.As<via.GameObject>());
         _gameObjectMo?.ReleaseIfGlobalized();
-
-        BattleHudDispatcher.UnregisterBattleHudCallbacks(onActivate: Show, onDeactivate: Hide);
     }
 }

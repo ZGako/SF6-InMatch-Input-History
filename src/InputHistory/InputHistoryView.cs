@@ -16,7 +16,7 @@ partial class InputHistoryClass
         private readonly InputHistoryClass _parent;
 
         // Add methods to display the input history, update the UI, and handle user interactions.
-        private readonly app.UIStateManager _uiStateManager;
+        // private readonly app.UIStateManager _uiStateManager;
 
         private readonly via.gui.ScrollList _leftSideScrollList;
         private readonly via.gui.ScrollList _rightSideScrollList;
@@ -40,27 +40,13 @@ partial class InputHistoryClass
         {
             _parent = parent;
 
-            _uiStateManager = uiAgent._StateManager;
+            // _uiStateManager = uiAgent._StateManager;
             var partsManager = uiAgent._PartsManager;
             var left = (partsManager._List[0] as IObject)?.As<app.UIPartsScrollList>();
             _leftSideScrollList = left?._List ?? throw new InvalidOperationException("Failed to retrieve the left side ScrollList from the UIAgent.");
 
-            var pos = via.vec3.REFType.CreateValueType().As<via.vec3>();
-            pos.x = _leftSideScrollList.Position.x;
-            pos.y = _leftSideScrollList.Position.y;
-            pos.z = _leftSideScrollList.Position.z;
-            pos.x += 100;
-            _leftSideScrollList.Position = pos;
-
             var right = (partsManager._List[1] as IObject)?.As<app.UIPartsScrollList>();
             _rightSideScrollList = right?._List ?? throw new InvalidOperationException("Failed to retrieve the right side ScrollList from the UIAgent.");
-
-            var pos2 = via.vec3.REFType.CreateValueType().As<via.vec3>();
-            pos2.x = _rightSideScrollList.Position.x;
-            pos2.y = _rightSideScrollList.Position.y;
-            pos2.z = _rightSideScrollList.Position.z;
-            pos2.x -= 100;
-            _rightSideScrollList.Position = pos2;
 
             // here we get all the children of the left and assign them to our list
             var leftChildren = UIHelpers.GetGuiChildrenOfType(_leftSideScrollList, via.gui.SelectItem.REFType);
@@ -88,7 +74,12 @@ partial class InputHistoryClass
 
             var showState = app.UIAgent.State.Show.REFType.CreateInstance(0);
 
-            _uiStateManager._Next = showState.As<app.UIStateBase>();
+            // set it once, it seems that setting this multiple times doesn't work properly.
+            // fallback to just changing the visibility of the elements instead
+            uiAgent._StateManager._Next = showState.As<app.UIStateBase>();
+
+            // still hide the actual elements
+            Hide();
         }
 
         private void ShiftHistory(List<via.gui.SelectItem> selectItems)
@@ -109,27 +100,12 @@ partial class InputHistoryClass
 
                 for (int j = 0; j < textChildrenOfCurrent.Length; j++)
                 {
-                    var currentTextMo = textChildrenOfCurrent[j] as ManagedObject;
-                    var previousTextMo = textChildrenOfPrevious[j] as ManagedObject;
+                    var currentText = textChildrenOfCurrent[j].GetObjectAs<via.gui.Text>("Failed to retrieve Text component from SelectItem.");
+                    var previousText = textChildrenOfPrevious[j].GetObjectAs<via.gui.Text>("Failed to retrieve Text component from SelectItem.");
 
-                    if (currentTextMo == null || previousTextMo == null)
-                    {
-                        throw new InvalidOperationException("Failed to cast child to ManagedObject.");
-                    }
-
-                    var currentText = currentTextMo.As<via.gui.Text>();
-                    var previousText = previousTextMo.As<via.gui.Text>();
-
-                    if (currentText == null || previousText == null)
-                    {
-                        throw new InvalidOperationException("Failed to cast ManagedObject to via.gui.Text.");
-                    }
-
-                    // copy the message from the previous item to the current item
-                    // currentText.Message = previousText.Message;
                     try
                     {
-                        string prevMessage = previousText.Message ?? "";
+                        string prevMessage = previousText.Message ?? string.Empty;
                         (currentText as IObject)?.Call("set_Message", _engineStringPool.GetOrCreate(prevMessage));
                     }
                     catch (Exception ex)
@@ -190,28 +166,7 @@ partial class InputHistoryClass
 
         public void UpdateUI()
         {
-            var controller = _parent._controller;
-            if (controller == null)
-            {
-                throw new InvalidOperationException("InputHistoryController is not initialized.");
-            }
-
-            if (controller.P1HeadVersion > _p1HeadVersion)
-            {
-                // update the left side UI
-                var p1Head = controller.GetP1InputHistory(0);
-                (_firstLeftItemText as IObject)?.Call("set_Message", _engineStringPool.GetOrCreate($"{p1Head.FrameCount}"));
-                _p1HeadVersion = controller.P1HeadVersion;
-            }
-
-            if (controller.P2HeadVersion > _p2HeadVersion)
-            {
-                // update the right side UI
-                var p2Head = controller.GetP2InputHistory(0);
-                (_firstRightItemText as IObject)?.Call("set_Message", _engineStringPool.GetOrCreate($"{p2Head.FrameCount}"));
-                _p2HeadVersion = controller.P2HeadVersion;
-            }
-
+            var controller = _parent._controller ?? throw new InvalidOperationException("InputHistoryController is not initialized.");
             if (controller.P1ShiftVersion > _p1ShiftVersion)
             {
                 // shift the left side UI down
@@ -231,14 +186,73 @@ partial class InputHistoryClass
                 // here we update the head item
                 SetFirstItem(_rightSelectItems[0], _firstRightItemText, controller.GetP2InputHistory(0).InputValue);
             }
+
+            if (controller.P1HeadVersion > _p1HeadVersion)
+            {
+                // update the left side UI
+                var p1Head = controller.GetP1InputHistory(0);
+                (_firstLeftItemText as IObject)?.Call("set_Message", _engineStringPool.GetOrCreate($"{p1Head.FrameCount}"));
+                _p1HeadVersion = controller.P1HeadVersion;
+            }
+
+            if (controller.P2HeadVersion > _p2HeadVersion)
+            {
+                // update the right side UI
+                var p2Head = controller.GetP2InputHistory(0);
+                (_firstRightItemText as IObject)?.Call("set_Message", _engineStringPool.GetOrCreate($"{p2Head.FrameCount}"));
+                _p2HeadVersion = controller.P2HeadVersion;
+            }
+
+
+        }
+
+        private void ResetList(List<via.gui.SelectItem> list)
+        {
+            foreach (var item in list)
+            {
+                // get the text elements of the current and previous items
+                var textChildrenOfCurrent = UIHelpers.GetGuiChildrenOfType(item, via.gui.Text.REFType);
+
+                if (textChildrenOfCurrent.Length == 0)
+                {
+                    throw new InvalidOperationException("Failed to retrieve Text components from SelectItem.");
+                }
+
+                for (int j = 0; j < textChildrenOfCurrent.Length; j++)
+                {
+                    var currentText = textChildrenOfCurrent[j].GetObjectAs<via.gui.Text>("Failed to retrieve Text component from SelectItem.");
+                    (currentText as IObject)?.Call("set_Message", _engineStringPool.GetOrCreate(string.Empty));
+                }
+            }
+        }
+
+        public void ResetHistory()
+        {
+            ResetList(_leftSelectItems);
+            ResetList(_rightSelectItems);
+
+            _p1HeadVersion = 0;
+            _p2HeadVersion = 0;
+            _p1ShiftVersion = 0;
+            _p2ShiftVersion = 0;
+        }
+
+        public void Show()
+        {
+            _leftSideScrollList.Visible = true;
+            _rightSideScrollList.Visible = true;
+        }
+
+        public void Hide()
+        {
+            _leftSideScrollList.Visible = false;
+            _rightSideScrollList.Visible = false;
         }
 
         public void Dispose()
         {
-            var hideState = app.UIAgent.State.Show.REFType.CreateInstance(0);
-
-            _uiStateManager._Curt = hideState.As<app.UIStateBase>();
-            _uiStateManager._Next = hideState.As<app.UIStateBase>();
+            _leftSideScrollList.Visible = false;
+            _rightSideScrollList.Visible = false;
 
             _engineStringPool.Dispose();
         }

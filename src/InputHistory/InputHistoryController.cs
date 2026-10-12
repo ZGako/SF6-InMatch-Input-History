@@ -1,5 +1,8 @@
 
 
+using SF6_Plugin_Core.Memory;
+using SF6_Plugin_Core.UI;
+
 namespace SF6_MIH.InputHistory;
 
 //FIXME: refactor
@@ -10,12 +13,15 @@ partial class InputHistoryClass
         private static InputHistoryController? s_instance;
         private readonly InputHistoryClass _parent;
 
+        private readonly app.BattleSystem _battleSystem;
         private readonly app.BattleSetting _battleSetting;
+        private readonly ManagedObject _gameMo;
         private readonly ManagedObject _player1Mo;
         private readonly ManagedObject _player2Mo;
 
-        private static Field? s_inputNewField;
-        private static Field? s_inputOldField;
+        private static readonly Field InputNewField = nBattle.cPlayer.REFType.GetField("pl_input_new");
+        // private static readonly Field InputOldField = nBattle.cPlayer.REFType.GetField("pl_input_old");
+        private static readonly Field FightStatusField = nBattle.sGame.REFType.GetField("fight_st");
 
         public struct InputState
         {
@@ -25,6 +31,20 @@ partial class InputHistoryClass
             public InputState()
             {
             }
+        }
+
+        private struct Config
+        {
+            public enum OnlinePosition
+            {
+                MATCHPLAYER,
+                ALWAYSP1,
+                ALWAYSP2
+            }
+
+            public OnlinePosition DisplayPosition;
+
+            public bool OfflineShowCPU;
         }
 
         private static ref InputState GetInputFromNewest(InputState[] buffer, int headIndex, int offset)
@@ -53,6 +73,7 @@ partial class InputHistoryClass
         // TODO: add a config thing
 
 
+
         // head versioning for each player, for when the input doesn't change and we need to +1 the current frame count
         public uint P1HeadVersion { get; private set; } = 0;
         public uint P2HeadVersion { get; private set; } = 0;
@@ -60,6 +81,9 @@ partial class InputHistoryClass
         // shift versioning for each player, for when the input changes and we shift down the history
         public uint P1ShiftVersion { get; private set; } = 1;
         public uint P2ShiftVersion { get; private set; } = 1;
+
+        // fight status of the previous frame
+        private nBattle.FIGHT_ST _previousFightStatus;
 
         // Add methods to handle user input, update the view, and manage the input history data.
 
@@ -71,40 +95,26 @@ partial class InputHistoryClass
             var battle = API.GetTDB().FindType("gBattle");
 
             var statics = battle?.Statics;
-
-            var settingsMo = statics?.GetField("Setting") as ManagedObject;
-            var settings = settingsMo?.As<app.BattleSetting>();
-            if (settings == null)
+            if (statics == null)
             {
-                throw new InvalidOperationException("Failed to retrieve BattleSetting from gBattle statics.");
+                throw new InvalidOperationException("Failed to retrieve gBattle statics.");
             }
 
-            var playerMo = statics?.GetField("Player") as ManagedObject;
-            if (playerMo == null)
-            {
-                throw new InvalidOperationException("Failed to retrieve Player from gBattle statics.");
-            }
+            _battleSystem = statics.GetField("System").GetObjectAs<app.BattleSystem>("Failed to retrieve BattleSystem from gBattle statics.");
 
-            var playerArrayMo = (playerMo as IObject).GetField("mcPlayer") as ManagedObject;
-            var playerArray = playerArrayMo?.As<_System.Array>();
+            _battleSetting = statics.GetField("Setting").GetObjectAs<app.BattleSetting>("Failed to retrieve BattleSetting from gBattle statics.");
+            _gameMo = statics.GetField("Game") as ManagedObject ?? throw new InvalidOperationException("Failed to retrieve sGame from gBattle statics.");
 
-            if (playerArray == null)
-            {
-                throw new InvalidOperationException("Failed to retrieve cPlayer_Array1D from Player.");
-            }
+            var playerMo = statics.GetField("Player") as ManagedObject ?? throw new InvalidOperationException("Failed to retrieve Player from gBattle statics.");
+            var playerArray = (playerMo as IObject).GetField("mcPlayer").GetObjectAs<_System.Array>("Failed to retrieve cPlayer_Array1D from Player.");
 
             _player1Mo = playerArray[0] as ManagedObject ?? throw new InvalidOperationException("Failed to retrieve Player 1 from cPlayer_Array1D.");
             _player2Mo = playerArray[1] as ManagedObject ?? throw new InvalidOperationException("Failed to retrieve Player 2 from cPlayer_Array1D.");
 
-            _battleSetting = settings;
-
-            s_inputNewField = nBattle.cPlayer.REFType.GetField("pl_input_new");
-            s_inputOldField = nBattle.cPlayer.REFType.GetField("pl_input_old");
-
-            if (s_inputNewField == null || s_inputOldField == null)
+            BattleHudDispatcher.RegisterBattleHudActivationCallbacks(Show, () =>
             {
-                throw new InvalidOperationException("Failed to retrieve pl_input_new or pl_input_old fields from cPlayer.");
-            }
+                // nothing test
+            });
 
             s_instance = this;
         }
@@ -115,14 +125,52 @@ partial class InputHistoryClass
             // Runs every frame before the engine update
             if (s_instance == null) return;
 
+            // check the fight status to determine if we should be tracking inputs or not
+            var gameAddress = s_instance._gameMo.GetAddress();
+            sbyte fightStatusByte = (sbyte)Marshal.ReadByte((nint)FightStatusField!.GetDataRaw(gameAddress, false));
+            var fightStatus = (nBattle.FIGHT_ST)fightStatusByte;
+
+            if (fightStatus != s_instance._previousFightStatus)
+            {
+                // API.LogInfo($"Fight status changed from {s_instance._previousFightStatus} to {fightStatus}.");
+                // status changed
+                switch (fightStatus)
+                {
+                    case nBattle.FIGHT_ST.READY:
+                        s_instance.ResetHistory();
+                        // if it changed from something else to ready, reset the history
+                        break;
+                    case nBattle.FIGHT_ST.FINISH:
+                        // if it changed to finish, hide the UI as the game won't call Unload on its own for some reason
+                        s_instance.Hide();
+                        break;
+                    case nBattle.FIGHT_ST.STAGE_INIT:
+                    case nBattle.FIGHT_ST.ROUND_INIT:
+                    case nBattle.FIGHT_ST.APPEAR:
+                    case nBattle.FIGHT_ST.NOW:
+                    case nBattle.FIGHT_ST.WIN_WAIT:
+                    case nBattle.FIGHT_ST.WIN:
+                        // keep them separate just in case I want to add something later
+                        break;
+                }
+            }
+
+            s_instance._previousFightStatus = fightStatus;
+
+            // double check for ease
+            if (fightStatus != nBattle.FIGHT_ST.READY && fightStatus != nBattle.FIGHT_ST.NOW) return;
+
+            // pause check
+            if (s_instance._battleSystem._IsPause) return;
+
             ulong p1Addr = s_instance._player1Mo.GetAddress();
             ulong p2Addr = s_instance._player2Mo.GetAddress();
 
-            ushort p1_input_new = (ushort)Marshal.ReadInt16((nint)s_inputNewField!.GetDataRaw(p1Addr, false));
+            ushort p1_input_new = (ushort)Marshal.ReadInt16((nint)InputNewField!.GetDataRaw(p1Addr, false));
             // ushort p1_input_old = (ushort)Marshal.ReadInt16((nint)s_inputOldField!.GetDataRaw(p1Addr, false));
             ref InputState p1_input_old = ref GetInputFromNewest(s_instance._p1InputBuffer, s_instance._p1HeadIndex, 0);
 
-            ushort p2_input_new = (ushort)Marshal.ReadInt16((nint)s_inputNewField!.GetDataRaw(p2Addr, false));
+            ushort p2_input_new = (ushort)Marshal.ReadInt16((nint)InputNewField!.GetDataRaw(p2Addr, false));
             // ushort p2_input_old = (ushort)Marshal.ReadInt16((nint)s_inputOldField!.GetDataRaw(p2Addr, false));
             ref InputState p2_input_old = ref GetInputFromNewest(s_instance._p2InputBuffer, s_instance._p2HeadIndex, 0);
 
@@ -183,17 +231,29 @@ partial class InputHistoryClass
             _p2HeadIndex = 0;
             P1HeadVersion = 0;
             P2HeadVersion = 0;
-            P1ShiftVersion = 0;
-            P2ShiftVersion = 0;
+            P1ShiftVersion = 1;
+            P2ShiftVersion = 1;
+
+            _parent._view?.ResetHistory();
         }
+
+
+        private void Show(app.BattleHudManager _)
+        {
+            _parent._view?.Show();
+        }
+
+        // TODO: call this function also when inputs aren't active (like inbetween round and shit)
+        private void Hide()
+        {
+            _parent._view?.Hide();
+        }
+
 
         public void Dispose()
         {
+            BattleHudDispatcher.UnregisterBattleHudCallbacks(onActivate: Show, onDeactivate: Hide);
             s_instance = null;
-
-            // other stuff probably
-            s_inputNewField = null;
-            s_inputOldField = null;
         }
     }
 
