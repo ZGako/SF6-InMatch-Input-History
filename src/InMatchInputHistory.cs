@@ -35,11 +35,13 @@ public static class InMatchInputHistory
     {
         // Logging stuff
         API.LogLevel = 0;
-        API.LogWarning("Loading InMatchInputHistory C# plugin...");
+        API.LogInfo("Loading InMatchInputHistory C# plugin...");
 
-        GameSingletonRegistry.RegisterUIAgentManager(onReady: RegisterFlowCallback);
+        GameSingletonRegistry.RegisterUIAgentManager(onReady: RegisterGuiHudCallback);
 
-        GameSingletonRegistry.RegisterResourceManager(onReady: RegisterFlowCallback);
+        GameSingletonRegistry.RegisterResourceManager(onReady: RegisterGuiHudCallback);
+
+        GameSingletonRegistry.RegisterBFlowManager(onReady: () => { });
     }
 
     // NoInlining necessary for dynamic assembly resolution
@@ -47,31 +49,71 @@ public static class InMatchInputHistory
     private static void UnloadPlugin()
     {
         API.LogInfo("Unloading InMatchInputHistory C# plugin...");
+        try
+        {
+            BattleHudDispatcher.UnregisterBattleHudCallbacks(onSetup: OnHudSetup, onUnload: UnloadingHud);
+        }
+        catch (Exception ex)
+        {
+            API.LogError($"Exception during UnloadPlugin: {ex}");
+        }
 
         s_inputHistoryModule?.Dispose();
         s_inputHistoryModule = null;
-
-        FlowTransitionDispatcher.UnregisterGameModeFlowTransition(app.EGameMode.TRAINING, EnteringMatch, ExitingMatch);
     }
 
-    private static void RegisterFlowCallback()
+    private static void RegisterGuiHudCallback()
     {
         if (GameSingletonRegistry.UIAgentManager != null && GameSingletonRegistry.ResourceManager != null)
         {
-            GameSingletonRegistry.RegisterBFlowManager(onReady: () => FlowTransitionDispatcher.RegisterGameModeFlowTransition(app.EGameMode.TRAINING, EnteringMatch, ExitingMatch));
+            GameSingletonRegistry.RegisterGuiManager(onReady: () =>
+            {
+                // FlowTransitionDispatcher.RegisterGameModeFlowTransition(app.EGameMode.TRAINING, EnteringMatch, ExitingMatch);
+                // FlowTransitionDispatcher.RegisterGameModeFlowTransition(app.EGameMode.VERSUS_2P, EnteringMatch, ExitingMatch);
+                BattleHudDispatcher.RegisterBattleHudSetupCallbacks(OnHudSetup, UnloadingHud);
+
+            });
         }
     }
 
-    private static void EnteringMatch()
+    private static void OnHudSetup(app.BattleHudManager _)
     {
-        API.LogInfo("Entering match state");
+        // verify that we're in a valid game mode
+        if (GameSingletonRegistry.BFlowManager == null)
+        {
+            return; // BFlowManager is not ready yet, exit early
+        }
+
+        var flowWork = GameSingletonRegistry.BFlowManager.m_flow_work;
+
+        var flowMap = flowWork.FlowMap;
+
+        if (flowMap is not IObject flowObj || !flowObj.GetTypeDefinition().IsDerivedFrom(app.battle.BattleFlowMap.REFType))
+        {
+            return; // FlowMap is not a BattleFlowMap, exit early
+        }
+
+        var battleFlowMap = ManagedProxy<app.battle.BattleFlowMap>.Create(flowMap);
+
+        if (battleFlowMap == null)
+        {
+            return; // Failed to create ManagedProxy for BattleFlowMap, exit early
+        }
+
+        var gameMode = battleFlowMap.m_desc.Rule.GameMode;
+
+        if (gameMode != app.EGameMode.TRAINING && gameMode != app.EGameMode.VERSUS_2P)
+        {
+            return;
+        }
+
         s_inputHistoryModule?.Dispose();
         s_inputHistoryModule = new InputHistoryClass();
     }
 
-    private static void ExitingMatch()
+    private static void UnloadingHud()
     {
-        API.LogInfo("Exiting match state");
+        // always dispose of the input history regardless when unloading the "HUD"
         s_inputHistoryModule?.Dispose();
         s_inputHistoryModule = null;
     }

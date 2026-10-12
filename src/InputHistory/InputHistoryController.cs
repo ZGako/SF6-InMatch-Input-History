@@ -164,7 +164,7 @@ partial class InputHistoryClass
 
             try
             {
-                s_instance._parent._view.UpdateUI();
+                s_instance._parent._view?.UpdateUI();
             }
             catch (Exception ex)
             {

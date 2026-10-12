@@ -191,6 +191,10 @@ partial class InputHistoryClass
         public void UpdateUI()
         {
             var controller = _parent._controller;
+            if (controller == null)
+            {
+                throw new InvalidOperationException("InputHistoryController is not initialized.");
+            }
 
             if (controller.P1HeadVersion > _p1HeadVersion)
             {
