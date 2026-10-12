@@ -35,6 +35,13 @@ partial class InputHistoryClass : IDisposable
         var uiAgent = ManagedProxy<app.UIAgent>.Create(uiAgentComponent) ?? throw new InvalidOperationException("Failed to retrieve UIAgent from the instantiated prefab.");
         _view = new InputHistoryView(this, uiAgent);
         _controller = new InputHistoryController(this);
+
+        ModConfig.OnConfigChanged += OnLiveConfigChanged;
+    }
+
+    private void OnLiveConfigChanged(ModConfig config)
+    {
+        _controller?.ApplyConfig(config);
     }
 
     public void Dispose()

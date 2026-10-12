@@ -37,11 +37,15 @@ public static class InMatchInputHistory
         API.LogLevel = 0;
         API.LogInfo("Loading InMatchInputHistory C# plugin...");
 
+        ModConfig.Load();
+
         GameSingletonRegistry.RegisterBFlowManager(onReady: RegisterGuiHudCallback);
 
         GameSingletonRegistry.RegisterUIAgentManager(onReady: RegisterGuiHudCallback);
 
         GameSingletonRegistry.RegisterResourceManager(onReady: RegisterGuiHudCallback);
+
+        GameSingletonRegistry.RegisterNetworkManager(onReady: () => { });
     }
 
     // NoInlining necessary for dynamic assembly resolution
@@ -60,6 +64,8 @@ public static class InMatchInputHistory
 
         s_inputHistoryModule?.Dispose();
         s_inputHistoryModule = null;
+
+        ModConfig.Clear();
     }
 
     private static void RegisterGuiHudCallback()
@@ -102,7 +108,7 @@ public static class InMatchInputHistory
 
             var gameMode = battleFlowMap.m_desc.Rule.GameMode;
 
-            if (gameMode != app.EGameMode.TRAINING && gameMode != app.EGameMode.VERSUS_2P)
+            if (!ModConfig.Instance.AppliedGameModes.IsEnabled(gameMode))
             {
                 return;
             }

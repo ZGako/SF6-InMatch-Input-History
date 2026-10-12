@@ -11,111 +11,201 @@ partial class InputHistoryClass
     private class InputHistoryView : IDisposable
     {
 
+        private class HistoryRow(via.gui.SelectItem item)
+        {
+            public readonly via.gui.Text FrameText = UIHelpers.GetGuiChild(item, "e_text_left").As<via.gui.Text>()
+                    ?? throw new InvalidOperationException("Failed to retrieve e_text_left.");
+            public readonly via.gui.Text DirectionText = UIHelpers.GetGuiChild(item, "e_text_center").As<via.gui.Text>()
+                    ?? throw new InvalidOperationException("Failed to retrieve e_text_center.");
+            public readonly via.gui.Text ButtonText = UIHelpers.GetGuiChild(item, "e_text_right").As<via.gui.Text>()
+                    ?? throw new InvalidOperationException("Failed to retrieve e_text_right.");
+
+            public string CachedFrame = string.Empty;
+            public string CachedDirection = string.Empty;
+            public string CachedButtons = string.Empty;
+        }
+
+        private class HudSidePanel
+        {
+            public readonly via.gui.ScrollList ScrollList;
+            public readonly List<HistoryRow> Rows = [];
+            public readonly List<via.gui.Texture> BackgroundElements = [];
+
+            public readonly via.vec3 BasePosition;
+            public readonly via.vec3 BaseScale;
+
+            // -1 = Hidden, 0 = Bound to P1, 1 = Bound to P2
+            public int BoundPlayerIndex { get; set; } = -1;
+            public uint LastHeadVersion { get; set; } = 0;
+            public uint LastShiftVersion { get; set; } = 0;
+
+            public HudSidePanel(via.gui.ScrollList scrollList)
+            {
+                ScrollList = scrollList;
+                BasePosition = scrollList.Position;
+                BaseScale = scrollList.Scale;
+
+                var children = UIHelpers.GetGuiChildrenOfType(scrollList, via.gui.SelectItem.REFType);
+                for (int i = children.Length - 1; i >= 0; i--)
+                {
+                    if (children[i] is ManagedObject childMo)
+                    {
+                        var selectItem = childMo.As<via.gui.SelectItem>();
+                        Rows.Add(new HistoryRow(selectItem));
+
+                        // Optional: cache background Rect/Texture elements inside each SelectItem if you want to toggle them
+                        var texture = UIHelpers.GetGuiChild(selectItem, "e_tex_line").As<via.gui.Texture>();
+                        BackgroundElements.Add(texture);
+                    }
+                }
+            }
+        }
+
         private readonly EngineStringPool _engineStringPool = new();
 
         private readonly InputHistoryClass _parent;
 
-        // Add methods to display the input history, update the UI, and handle user interactions.
-        // private readonly app.UIStateManager _uiStateManager;
+        private readonly HudSidePanel _leftPanel;
+        private readonly HudSidePanel _rightPanel;
 
-        private readonly via.gui.ScrollList _leftSideScrollList;
-        private readonly via.gui.ScrollList _rightSideScrollList;
-
-        private readonly List<via.gui.SelectItem> _leftSelectItems = [];
-        private readonly List<via.gui.SelectItem> _rightSelectItems = [];
-
-        // hold references to these as they update basically each frame
-        private readonly via.gui.Text _firstLeftItemText;
-        private readonly via.gui.Text _firstRightItemText;
-
-        private app.EConfigInputType _P1InputType = app.EConfigInputType.NOT_SPECIFIED;
-        private app.EConfigInputType _P2InputType = app.EConfigInputType.NOT_SPECIFIED;
-
-        // head versioning for each player, for when the input doesn't change and we need to +1 the current frame count
-        private uint _p1HeadVersion = 1;
-        private uint _p2HeadVersion = 1;
-
-        // shift versioning for each player, for when the input changes and we shift down the history
-        private uint _p1ShiftVersion = 0;
-        private uint _p2ShiftVersion = 0;
+        private bool _isHudVisible = false;
 
         public InputHistoryView(InputHistoryClass parent, app.UIAgent uiAgent)
         {
             _parent = parent;
 
-            // _uiStateManager = uiAgent._StateManager;
             var partsManager = uiAgent._PartsManager;
             var left = (partsManager._List[0] as IObject)?.As<app.UIPartsScrollList>();
-            _leftSideScrollList = left?._List ?? throw new InvalidOperationException("Failed to retrieve the left side ScrollList from the UIAgent.");
+            var leftScrollList = left?._List ?? throw new InvalidOperationException("Failed to retrieve the left side ScrollList from the UIAgent.");
 
             var right = (partsManager._List[1] as IObject)?.As<app.UIPartsScrollList>();
-            _rightSideScrollList = right?._List ?? throw new InvalidOperationException("Failed to retrieve the right side ScrollList from the UIAgent.");
+            var rightScrollList = right?._List ?? throw new InvalidOperationException("Failed to retrieve the right side ScrollList from the UIAgent.");
 
-            // here we get all the children of the left and assign them to our list
-            var leftChildren = UIHelpers.GetGuiChildrenOfType(_leftSideScrollList, via.gui.SelectItem.REFType);
-            for (int i = leftChildren.Length - 1; i >= 0; i--)
-            {
-                // iterate backwards to reverse the order of the items, as they are added in reverse order in the prefab
-                var childMo = leftChildren[i] as ManagedObject;
-                if (childMo == null) continue;
-                _leftSelectItems.Add(childMo.As<via.gui.SelectItem>());
-            }
-
-            var rightChildren = UIHelpers.GetGuiChildrenOfType(_rightSideScrollList, via.gui.SelectItem.REFType);
-            for (int i = rightChildren.Length - 1; i >= 0; i--)
-            {
-                // iterate backwards to reverse the order of the items, as they are added in reverse order in the prefab
-                var childMo = rightChildren[i] as ManagedObject;
-                if (childMo == null) continue;
-                _rightSelectItems.Add(childMo.As<via.gui.SelectItem>());
-            }
-
-            // get a handle to the text components of the first items in each list, so we can update them easily
-            _firstLeftItemText = UIHelpers.GetGuiChild(_leftSelectItems[0], "e_text_left").As<via.gui.Text>();
-            _firstRightItemText = UIHelpers.GetGuiChild(_rightSelectItems[0], "e_text_left").As<via.gui.Text>();
-
+            _leftPanel = new HudSidePanel(leftScrollList);
+            _rightPanel = new HudSidePanel(rightScrollList);
 
             var showState = app.UIAgent.State.Show.REFType.CreateInstance(0);
-
-            // set it once, it seems that setting this multiple times doesn't work properly.
-            // fallback to just changing the visibility of the elements instead
             uiAgent._StateManager._Next = showState.As<app.UIStateBase>();
 
-            // still hide the actual elements
             Hide();
         }
 
-        private void ShiftHistory(List<via.gui.SelectItem> selectItems)
+        private void SetText(via.gui.Text textComponent, string message)
         {
-            for (int i = selectItems.Count - 1; i > 0; i--)
+            (textComponent as IObject)?.Call("set_Message", _engineStringPool.GetOrCreate(message));
+        }
+
+        private void SetRowValues(HistoryRow row, string frame, string direction, string buttons)
+        {
+            if (row.CachedFrame != frame)
             {
-                var currentItem = selectItems[i];
-                var previousItem = selectItems[i - 1];
+                row.CachedFrame = frame;
+                SetText(row.FrameText, frame);
+            }
+            if (row.CachedDirection != direction)
+            {
+                row.CachedDirection = direction;
+                SetText(row.DirectionText, direction);
+            }
+            if (row.CachedButtons != buttons)
+            {
+                row.CachedButtons = buttons;
+                SetText(row.ButtonText, buttons);
+            }
+        }
 
-                // get the text elements of the current and previous items
-                var textChildrenOfCurrent = UIHelpers.GetGuiChildrenOfType(currentItem, via.gui.Text.REFType);
-                var textChildrenOfPrevious = UIHelpers.GetGuiChildrenOfType(previousItem, via.gui.Text.REFType);
+        private void ShiftHistory(HudSidePanel panel)
+        {
+            for (int i = panel.Rows.Count - 1; i > 0; i--)
+            {
+                var current = panel.Rows[i];
+                var previous = panel.Rows[i - 1];
 
-                if (textChildrenOfCurrent.Length == 0 || textChildrenOfPrevious.Length == 0)
+                SetRowValues(current, previous.CachedFrame, previous.CachedDirection, previous.CachedButtons);
+            }
+        }
+
+        public void SetPanelBindings(int leftPlayerIdx, int rightPlayerIdx)
+        {
+            UpdatePanelBinding(_leftPanel, leftPlayerIdx);
+            UpdatePanelBinding(_rightPanel, rightPlayerIdx);
+            UpdateVisibility();
+        }
+
+        private void UpdatePanelBinding(HudSidePanel panel, int newPlayerIdx)
+        {
+            if (panel.BoundPlayerIndex == newPlayerIdx) return;
+
+            panel.BoundPlayerIndex = newPlayerIdx;
+
+            if (newPlayerIdx == -1)
+            {
+                ResetPanel(panel);
+            }
+            else if (_parent._controller != null)
+            {
+                RebuildPanel(panel, _parent._controller);
+            }
+        }
+
+        private void RebuildPanel(HudSidePanel panel, InputHistoryController controller)
+        {
+            int playerIdx = panel.BoundPlayerIndex;
+            if (playerIdx == -1) return;
+
+            var commandType = controller.GetCommandType(playerIdx);
+
+            for (int offset = 0; offset < panel.Rows.Count; offset++)
+            {
+                var state = controller.GetInputHistory(playerIdx, offset);
+                var row = panel.Rows[offset];
+
+                if (state.FrameCount == 0)
                 {
-                    throw new InvalidOperationException("Failed to retrieve Text components from SelectItem.");
+                    SetRowValues(row, string.Empty, string.Empty, string.Empty);
                 }
-
-                for (int j = 0; j < textChildrenOfCurrent.Length; j++)
+                else
                 {
-                    var currentText = textChildrenOfCurrent[j].GetObjectAs<via.gui.Text>("Failed to retrieve Text component from SelectItem.");
-                    var previousText = textChildrenOfPrevious[j].GetObjectAs<via.gui.Text>("Failed to retrieve Text component from SelectItem.");
-
-                    try
-                    {
-                        string prevMessage = previousText.Message ?? string.Empty;
-                        (currentText as IObject)?.Call("set_Message", _engineStringPool.GetOrCreate(prevMessage));
-                    }
-                    catch (Exception ex)
-                    {
-                        API.LogError($"Failed to assign text during ShiftHistory: {ex.Message}");
-                    }
+                    string frameStr = $"{state.FrameCount}";
+                    string dirStr = ParseInputDirection(state.InputValue);
+                    string btnStr = ParseInputButtons(state.InputValue, commandType);
+                    SetRowValues(row, frameStr, dirStr, btnStr);
                 }
+            }
+
+            // If the match hasn't recorded its first frame yet, keep versions at 0 so frame 1 triggers an initial write
+            var newestState = controller.GetInputHistory(playerIdx, 0);
+            if (newestState.FrameCount == 0)
+            {
+                panel.LastHeadVersion = 0;
+                panel.LastShiftVersion = 0;
+            }
+            else
+            {
+                panel.LastHeadVersion = controller.GetHeadVersion(playerIdx);
+                panel.LastShiftVersion = controller.GetShiftVersion(playerIdx);
+            }
+        }
+
+        public void ApplyVisualConfig(ModConfig config)
+        {
+            ApplyPanelTransform(_leftPanel, config.LeftPanelTransform, config.ShowBackgroundTexture);
+            ApplyPanelTransform(_rightPanel, config.RightPanelTransform, config.ShowBackgroundTexture);
+        }
+
+        private static void ApplyPanelTransform(HudSidePanel panel, PanelTransformConfig transform, bool showBackground)
+        {
+            var pos = panel.BasePosition;
+            pos.x += transform.OffsetX;
+            pos.y += transform.OffsetY;
+            panel.ScrollList.Position = pos;
+
+            var scale = panel.BaseScale * transform.Scale;
+            panel.ScrollList.Scale = scale;
+
+            foreach (var bg in panel.BackgroundElements)
+            {
+                bg.Visible = showBackground;
             }
         }
 
@@ -196,99 +286,85 @@ partial class InputHistoryClass
         public void UpdateUI()
         {
             var controller = _parent._controller ?? throw new InvalidOperationException("InputHistoryController is not initialized.");
-            if (controller.P1ShiftVersion > _p1ShiftVersion)
-            {
-                // shift the left side UI down
-                ShiftHistory(_leftSelectItems);
-                _p1ShiftVersion = controller.P1ShiftVersion;
 
-                // here we update the head item
-                SetFirstItem(_leftSelectItems[0], _firstLeftItemText, controller.GetP1InputHistory(0).InputValue, _P1InputType);
-            }
-
-            if (controller.P2ShiftVersion > _p2ShiftVersion)
-            {
-                // shift the right side UI down
-                ShiftHistory(_rightSelectItems);
-                _p2ShiftVersion = controller.P2ShiftVersion;
-
-                // here we update the head item
-                SetFirstItem(_rightSelectItems[0], _firstRightItemText, controller.GetP2InputHistory(0).InputValue, _P2InputType);
-            }
-
-            if (controller.P1HeadVersion > _p1HeadVersion)
-            {
-                // update the left side UI
-                var p1Head = controller.GetP1InputHistory(0);
-                (_firstLeftItemText as IObject)?.Call("set_Message", _engineStringPool.GetOrCreate($"{p1Head.FrameCount}"));
-                _p1HeadVersion = controller.P1HeadVersion;
-            }
-
-            if (controller.P2HeadVersion > _p2HeadVersion)
-            {
-                // update the right side UI
-                var p2Head = controller.GetP2InputHistory(0);
-                (_firstRightItemText as IObject)?.Call("set_Message", _engineStringPool.GetOrCreate($"{p2Head.FrameCount}"));
-                _p2HeadVersion = controller.P2HeadVersion;
-            }
-
-
+            UpdatePanel(_leftPanel, controller);
+            UpdatePanel(_rightPanel, controller);
         }
 
-        private void ResetList(List<via.gui.SelectItem> list)
+        private void UpdatePanel(HudSidePanel panel, InputHistoryController controller)
         {
-            foreach (var item in list)
+            int playerIdx = panel.BoundPlayerIndex;
+            if (playerIdx == -1) return;
+
+            uint targetShift = controller.GetShiftVersion(playerIdx);
+            uint targetHead = controller.GetHeadVersion(playerIdx);
+
+            if (targetShift > panel.LastShiftVersion)
             {
-                // get the text elements of the current and previous items
-                var textChildrenOfCurrent = UIHelpers.GetGuiChildrenOfType(item, via.gui.Text.REFType);
+                ShiftHistory(panel);
+                panel.LastShiftVersion = targetShift;
 
-                if (textChildrenOfCurrent.Length == 0)
-                {
-                    throw new InvalidOperationException("Failed to retrieve Text components from SelectItem.");
-                }
+                var headState = controller.GetInputHistory(playerIdx, 0);
+                var cmdType = controller.GetCommandType(playerIdx);
 
-                for (int j = 0; j < textChildrenOfCurrent.Length; j++)
-                {
-                    var currentText = textChildrenOfCurrent[j].GetObjectAs<via.gui.Text>("Failed to retrieve Text component from SelectItem.");
-                    (currentText as IObject)?.Call("set_Message", _engineStringPool.GetOrCreate(string.Empty));
-                }
+                SetRowValues(
+                    panel.Rows[0],
+                    $"{headState.FrameCount}",
+                    ParseInputDirection(headState.InputValue),
+                    ParseInputButtons(headState.InputValue, cmdType)
+                );
+
+                panel.LastHeadVersion = targetHead;
             }
+            else if (targetHead > panel.LastHeadVersion)
+            {
+                var headState = controller.GetInputHistory(playerIdx, 0);
+                string frameStr = $"{headState.FrameCount}";
+                panel.Rows[0].CachedFrame = frameStr;
+                SetText(panel.Rows[0].FrameText, frameStr);
+
+                panel.LastHeadVersion = targetHead;
+            }
+        }
+
+        private void ResetPanel(HudSidePanel panel)
+        {
+            foreach (var row in panel.Rows)
+            {
+                SetRowValues(row, string.Empty, string.Empty, string.Empty);
+            }
+            panel.LastHeadVersion = 0;
+            panel.LastShiftVersion = 0;
         }
 
         public void ResetHistory()
         {
-            ResetList(_leftSelectItems);
-            ResetList(_rightSelectItems);
+            ResetPanel(_leftPanel);
+            ResetPanel(_rightPanel);
+        }
 
-            _p1HeadVersion = 0;
-            _p2HeadVersion = 0;
-            _p1ShiftVersion = 0;
-            _p2ShiftVersion = 0;
+        private void UpdateVisibility()
+        {
+            _leftPanel.ScrollList.Visible = _isHudVisible && (_leftPanel.BoundPlayerIndex != -1);
+            _rightPanel.ScrollList.Visible = _isHudVisible && (_rightPanel.BoundPlayerIndex != -1);
         }
 
         public void Show()
         {
-            _leftSideScrollList.Visible = true;
-            _rightSideScrollList.Visible = true;
+            _isHudVisible = true;
+            UpdateVisibility();
         }
 
         public void Hide()
         {
-            _leftSideScrollList.Visible = false;
-            _rightSideScrollList.Visible = false;
-        }
-
-        public void SetInputTypes(app.EConfigInputType p1InputType, app.EConfigInputType p2InputType)
-        {
-            _P1InputType = p1InputType;
-            _P2InputType = p2InputType;
+            _isHudVisible = false;
+            UpdateVisibility();
         }
 
         public void Dispose()
         {
-            _leftSideScrollList.Visible = false;
-            _rightSideScrollList.Visible = false;
-
+            _leftPanel.ScrollList.Visible = false;
+            _rightPanel.ScrollList.Visible = false;
             _engineStringPool.Dispose();
         }
     }
