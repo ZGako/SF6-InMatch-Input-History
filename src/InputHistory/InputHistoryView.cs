@@ -28,6 +28,9 @@ partial class InputHistoryClass
         private readonly via.gui.Text _firstLeftItemText;
         private readonly via.gui.Text _firstRightItemText;
 
+        private app.EConfigInputType _P1InputType = app.EConfigInputType.NOT_SPECIFIED;
+        private app.EConfigInputType _P2InputType = app.EConfigInputType.NOT_SPECIFIED;
+
         // head versioning for each player, for when the input doesn't change and we need to +1 the current frame count
         private uint _p1HeadVersion = 1;
         private uint _p2HeadVersion = 1;
@@ -135,24 +138,50 @@ partial class InputHistoryClass
             return $"<ICON {inputKey}>";
         }
 
-        private static string ParseInputButtons(ushort inputValue)
+        private static string ParseInputButtons(ushort inputValue, app.EConfigInputType inputType)
         {
             var buttonMask = (ushort)(inputValue >> 4); // Shift right to get the upper 12 bits
             var buttons = new List<string>();
 
             // TODO - add support for modern vs classic vs dynamic
-
-            if ((buttonMask & (1 << 0)) != 0) buttons.Add("<ICON lp>");
-            if ((buttonMask & (1 << 1)) != 0) buttons.Add("<ICON mp>");
-            if ((buttonMask & (1 << 2)) != 0) buttons.Add("<ICON hp>");
-            if ((buttonMask & (1 << 3)) != 0) buttons.Add("<ICON lk>");
-            if ((buttonMask & (1 << 4)) != 0) buttons.Add("<ICON mk>");
-            if ((buttonMask & (1 << 5)) != 0) buttons.Add("<ICON hk>");
+            switch (inputType)
+            {
+                case app.EConfigInputType.NORMAL:
+                    if ((buttonMask & (1 << 0)) != 0) buttons.Add("<ICON lp>");
+                    if ((buttonMask & (1 << 1)) != 0) buttons.Add("<ICON mp>");
+                    if ((buttonMask & (1 << 2)) != 0) buttons.Add("<ICON hp>");
+                    if ((buttonMask & (1 << 3)) != 0) buttons.Add("<ICON lk>");
+                    if ((buttonMask & (1 << 4)) != 0) buttons.Add("<ICON mk>");
+                    if ((buttonMask & (1 << 5)) != 0) buttons.Add("<ICON hk>");
+                    break;
+                case app.EConfigInputType.CASUAL:
+                    if ((buttonMask & (1 << 0)) != 0) buttons.Add("<ICON ls>");
+                    if ((buttonMask & (1 << 1)) != 0) buttons.Add("<ICON sm>");
+                    if ((buttonMask & (1 << 2)) != 0) buttons.Add("<ICON dp>");
+                    if ((buttonMask & (1 << 3)) != 0) buttons.Add("<ICON ms>");
+                    if ((buttonMask & (1 << 4)) != 0) buttons.Add("<ICON hs>");
+                    if ((buttonMask & (1 << 5)) != 0) buttons.Add("<ICON auto>");
+                    if ((buttonMask & (1 << 8)) != 0) buttons.Add("<ICON di>");
+                    if ((buttonMask & (1 << 9)) != 0) buttons.Add("<ICON tr>");
+                    break;
+                case app.EConfigInputType.SUPER_EASY:
+                    if ((buttonMask & (1 << 0)) != 0) buttons.Add("<ICON ls>");
+                    if ((buttonMask & (1 << 1)) != 0) buttons.Add("<ICON di>");
+                    if ((buttonMask & (1 << 2)) != 0) buttons.Add("<ICON dp>");
+                    if ((buttonMask & (1 << 3)) != 0) buttons.Add("<ICON ms>");
+                    if ((buttonMask & (1 << 4)) != 0) buttons.Add("<ICON hs>");
+                    if ((buttonMask & (1 << 5)) != 0) buttons.Add("<ICON sa>");
+                    if ((buttonMask & (1 << 8)) != 0) buttons.Add("<ICON tr>");
+                    if ((buttonMask & (1 << 9)) != 0) buttons.Add("<ICON od>");
+                    break;
+                default:
+                    break;
+            }
 
             return string.Join("", buttons);
         }
 
-        private void SetFirstItem(via.gui.SelectItem selectItem, via.gui.Text frameText, ushort inputValue)
+        private void SetFirstItem(via.gui.SelectItem selectItem, via.gui.Text frameText, ushort inputValue, app.EConfigInputType inputType)
         {
             // set the message of the text component to the input value
             var directionText = UIHelpers.GetGuiChild(selectItem, "e_text_center").As<via.gui.Text>();
@@ -161,7 +190,7 @@ partial class InputHistoryClass
 
             (frameText as IObject)?.Call("set_Message", _engineStringPool.GetOrCreate("1"));
             (directionText as IObject)?.Call("set_Message", _engineStringPool.GetOrCreate(ParseInputDirection(inputValue)));
-            (buttonText as IObject)?.Call("set_Message", _engineStringPool.GetOrCreate(ParseInputButtons(inputValue)));
+            (buttonText as IObject)?.Call("set_Message", _engineStringPool.GetOrCreate(ParseInputButtons(inputValue, inputType)));
         }
 
         public void UpdateUI()
@@ -174,7 +203,7 @@ partial class InputHistoryClass
                 _p1ShiftVersion = controller.P1ShiftVersion;
 
                 // here we update the head item
-                SetFirstItem(_leftSelectItems[0], _firstLeftItemText, controller.GetP1InputHistory(0).InputValue);
+                SetFirstItem(_leftSelectItems[0], _firstLeftItemText, controller.GetP1InputHistory(0).InputValue, _P1InputType);
             }
 
             if (controller.P2ShiftVersion > _p2ShiftVersion)
@@ -184,7 +213,7 @@ partial class InputHistoryClass
                 _p2ShiftVersion = controller.P2ShiftVersion;
 
                 // here we update the head item
-                SetFirstItem(_rightSelectItems[0], _firstRightItemText, controller.GetP2InputHistory(0).InputValue);
+                SetFirstItem(_rightSelectItems[0], _firstRightItemText, controller.GetP2InputHistory(0).InputValue, _P2InputType);
             }
 
             if (controller.P1HeadVersion > _p1HeadVersion)
@@ -247,6 +276,12 @@ partial class InputHistoryClass
         {
             _leftSideScrollList.Visible = false;
             _rightSideScrollList.Visible = false;
+        }
+
+        public void SetInputTypes(app.EConfigInputType p1InputType, app.EConfigInputType p2InputType)
+        {
+            _P1InputType = p1InputType;
+            _P2InputType = p2InputType;
         }
 
         public void Dispose()

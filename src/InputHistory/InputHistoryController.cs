@@ -103,6 +103,12 @@ partial class InputHistoryClass
             _battleSystem = statics.GetField("System").GetObjectAs<app.BattleSystem>("Failed to retrieve BattleSystem from gBattle statics.");
 
             _battleSetting = statics.GetField("Setting").GetObjectAs<app.BattleSetting>("Failed to retrieve BattleSetting from gBattle statics.");
+
+            var player1 = _battleSetting.Player1P();
+            var player2 = _battleSetting.Player2P();
+
+            _parent._view?.SetInputTypes(player1.CommandType, player2.CommandType);
+
             _gameMo = statics.GetField("Game") as ManagedObject ?? throw new InvalidOperationException("Failed to retrieve sGame from gBattle statics.");
 
             var playerMo = statics.GetField("Player") as ManagedObject ?? throw new InvalidOperationException("Failed to retrieve Player from gBattle statics.");
@@ -233,6 +239,12 @@ partial class InputHistoryClass
             P2HeadVersion = 0;
             P1ShiftVersion = 1;
             P2ShiftVersion = 1;
+
+
+            var player1 = _battleSetting.Player1P();
+            var player2 = _battleSetting.Player2P();
+
+            _parent._view?.SetInputTypes(player1.CommandType, player2.CommandType);
 
             _parent._view?.ResetHistory();
         }
