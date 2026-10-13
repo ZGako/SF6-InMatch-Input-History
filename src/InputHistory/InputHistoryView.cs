@@ -1,5 +1,5 @@
 using SF6_Plugin_Core.Memory;
-using SF6_Plugin_Core.UI;
+using SF6_Plugin_Core.UI.Helpers;
 
 
 namespace SF6_MIH.InputHistory;
@@ -61,7 +61,7 @@ partial class InputHistoryClass
             }
         }
 
-        private readonly EngineStringPool _engineStringPool = new();
+        private readonly ManagedStringPool _engineStringPool = new();
 
         private readonly InputHistoryClass _parent;
 

@@ -12,12 +12,8 @@ using System.Runtime.CompilerServices;
 using System.Runtime.Loader;
 // Core usings
 using SF6_Plugin_Core.UI;
-using SF6_Plugin_Core.UI.TrainingPauseMenu;
-using SF6_Plugin_Core.UI.TrainingPauseMenu.CustomElements;
-using SF6_Plugin_Core.UI.TrainingPauseMenu.DispatchRequests;
-using SF6_Plugin_Core.UI.TrainingPauseMenu.ModificationRequests;
 
-// TrainingModePlus usings
+
 using System.Reflection;
 using SF6_MIH.InputHistory;
 using SF6_Plugin_Core.Services;
@@ -39,13 +35,13 @@ public static class InMatchInputHistory
 
         ModConfig.Load();
 
-        GameSingletonRegistry.RegisterBFlowManager(onReady: RegisterGuiHudCallback);
+        GameSingletonManager.RegisterBFlowManager(onReady: RegisterGuiHudCallback);
 
-        GameSingletonRegistry.RegisterUIAgentManager(onReady: RegisterGuiHudCallback);
+        GameSingletonManager.RegisterUIAgentManager(onReady: RegisterGuiHudCallback);
 
-        GameSingletonRegistry.RegisterResourceManager(onReady: RegisterGuiHudCallback);
+        GameSingletonManager.RegisterResourceManager(onReady: RegisterGuiHudCallback);
 
-        GameSingletonRegistry.RegisterNetworkManager(onReady: () => { });
+        GameSingletonManager.RegisterNetworkManager(onReady: () => { });
     }
 
     // NoInlining necessary for dynamic assembly resolution
@@ -55,7 +51,7 @@ public static class InMatchInputHistory
         API.LogInfo("Unloading InMatchInputHistory C# plugin...");
         try
         {
-            BattleHudDispatcher.UnregisterBattleHudCallbacks(onSetup: OnHudSetup, onUnload: UnloadingHud);
+            BattleHudHooks.UnregisterBattleHudCallbacks(onSetup: OnHudSetup, onUnload: UnloadingHud);
         }
         catch (Exception ex)
         {
@@ -70,12 +66,12 @@ public static class InMatchInputHistory
 
     private static void RegisterGuiHudCallback()
     {
-        if (GameSingletonRegistry.UIAgentManager != null && GameSingletonRegistry.ResourceManager != null && GameSingletonRegistry.BFlowManager != null)
+        if (GameSingletonManager.UIAgentManager != null && GameSingletonManager.ResourceManager != null && GameSingletonManager.BFlowManager != null)
         {
-            GameSingletonRegistry.RegisterGuiManager(onReady: () =>
+            GameSingletonManager.RegisterGuiManager(onReady: () =>
             {
                 //TODO: add part of the config here maybe?
-                BattleHudDispatcher.RegisterBattleHudSetupCallbacks(OnHudSetup, UnloadingHud);
+                BattleHudHooks.RegisterBattleHudSetupCallbacks(OnHudSetup, UnloadingHud);
             });
         }
     }
@@ -83,14 +79,14 @@ public static class InMatchInputHistory
     private static void OnHudSetup(app.BattleHudManager _)
     {
         // verify that we're in a valid game mode
-        if (GameSingletonRegistry.BFlowManager == null)
+        if (GameSingletonManager.BFlowManager == null)
         {
             return; // BFlowManager is not ready yet, exit early
         }
 
         try
         {
-            var flowWork = GameSingletonRegistry.BFlowManager.m_flow_work;
+            var flowWork = GameSingletonManager.BFlowManager.m_flow_work;
 
             var flowMap = flowWork.FlowMap;
 

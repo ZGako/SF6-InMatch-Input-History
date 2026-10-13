@@ -1,4 +1,4 @@
-using SF6_Plugin_Core.UI;
+using SF6_Plugin_Core.UI.Helpers;
 
 namespace SF6_MIH.InputHistory;
 
@@ -16,7 +16,7 @@ partial class InputHistoryClass : IDisposable
 
     public InputHistoryClass()
     {
-        UIPrefabFactory.CreateUIPrefab("Product/GUI/gm/ui11200/ui11254/ui11254.pfb", OnPrefabReady);
+        UIPrefabLoader.CreateUIPrefab("Product/GUI/gm/ui11200/ui11254/ui11254.pfb", OnPrefabReady);
     }
 
     private void OnPrefabReady(ManagedObject prefabMo)

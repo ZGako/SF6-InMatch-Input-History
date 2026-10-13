@@ -1,5 +1,4 @@
 
-
 using SF6_Plugin_Core.Memory;
 using SF6_Plugin_Core.Services;
 using SF6_Plugin_Core.UI;
@@ -104,7 +103,7 @@ partial class InputHistoryClass
             _player1Mo = playerArray[0] as ManagedObject ?? throw new InvalidOperationException("Failed to retrieve Player 1 from cPlayer_Array1D.");
             _player2Mo = playerArray[1] as ManagedObject ?? throw new InvalidOperationException("Failed to retrieve Player 2 from cPlayer_Array1D.");
 
-            BattleHudDispatcher.RegisterBattleHudActivationCallbacks(Show, OnHudDeactivate);
+            BattleHudHooks.RegisterBattleHudActivationCallbacks(Show, OnHudDeactivate);
 
             s_instance = this;
         }
@@ -305,7 +304,7 @@ partial class InputHistoryClass
 
                 if (_isOnline)
                 {
-                    var selfInfo = GameSingletonRegistry.NetworkManager?.Session?.FGBattle?.SelfBattleMemberInfo;
+                    var selfInfo = GameSingletonManager.NetworkManager?.Session?.FGBattle?.SelfBattleMemberInfo;
                     if (selfInfo != null)
                     {
                         _onlineSelfPlayerIndex = (selfInfo.MemberIndex == 0) ? 0 : 1;
@@ -332,7 +331,7 @@ partial class InputHistoryClass
 
         public void Dispose()
         {
-            BattleHudDispatcher.UnregisterBattleHudCallbacks(onActivate: Show, onDeactivate: OnHudDeactivate);
+            BattleHudHooks.UnregisterBattleHudCallbacks(onActivate: Show, onDeactivate: OnHudDeactivate);
             s_instance = null;
         }
     }
