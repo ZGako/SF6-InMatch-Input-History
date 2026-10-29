@@ -1,4 +1,5 @@
-﻿using SF6_Plugin_Core.UI.InjectionShared;
+﻿using SF6_Plugin_Core.Services;
+using SF6_Plugin_Core.UI.InjectionShared;
 using SF6_Plugin_Core.UI.Localization;
 using SF6_Plugin_Core.UI.OptionsSettings.Core;
 using SF6_Plugin_Core.UI.OptionsSettings.CustomOptions;
@@ -113,6 +114,9 @@ public static class ConfigOptionsMenu
                 true));
         BindValueChange(enableLocalVS, val => ModConfig.Instance.AppliedGameModes.LocalVS = val == 0);
 
+        enableLocalVS.AddHook(new OnDisableReasonHookRequest(() =>
+            GameSingletonManager.BFlowManager?.m_flow_work.SceneId == app.constant.scn.Index.eBattleMain));
+
         var enableSimSim = new UICustomOptionsValueNode(ENABLE_IN_SIMSIM,
             new OnOffSpinBoxOptionInitializer(
                 CustomMessage.FromKey("Mode_SimSim_Title"),
@@ -120,6 +124,8 @@ public static class ConfigOptionsMenu
                 ModConfig.Instance.AppliedGameModes.SimSimBattle,
                 true));
         BindValueChange(enableSimSim, val => ModConfig.Instance.AppliedGameModes.SimSimBattle = val == 0);
+        enableSimSim.AddHook(new OnDisableReasonHookRequest(() =>
+            GameSingletonManager.BFlowManager?.m_flow_work.SceneId == app.constant.scn.Index.eBattleMain));
 
         var enableRanked = new UICustomOptionsValueNode(ENABLE_IN_RANKED,
             new OnOffSpinBoxOptionInitializer(
@@ -128,6 +134,8 @@ public static class ConfigOptionsMenu
                 ModConfig.Instance.AppliedGameModes.RankedMatch,
                 true));
         BindValueChange(enableRanked, val => ModConfig.Instance.AppliedGameModes.RankedMatch = val == 0);
+        enableRanked.AddHook(new OnDisableReasonHookRequest(() =>
+            GameSingletonManager.BFlowManager?.m_flow_work.SceneId == app.constant.scn.Index.eBattleMain));
 
         var enableCasuals = new UICustomOptionsValueNode(ENABLE_IN_CASUALS,
             new OnOffSpinBoxOptionInitializer(
@@ -136,6 +144,8 @@ public static class ConfigOptionsMenu
                 ModConfig.Instance.AppliedGameModes.CasualMatch,
                 true));
         BindValueChange(enableCasuals, val => ModConfig.Instance.AppliedGameModes.CasualMatch = val == 0);
+        enableCasuals.AddHook(new OnDisableReasonHookRequest(() =>
+            GameSingletonManager.BFlowManager?.m_flow_work.SceneId == app.constant.scn.Index.eBattleMain));
 
         var enableBattleHub = new UICustomOptionsValueNode(ENABLE_IN_BATTLEHUD,
             new OnOffSpinBoxOptionInitializer(
@@ -144,6 +154,8 @@ public static class ConfigOptionsMenu
                 ModConfig.Instance.AppliedGameModes.BattleHubMatch,
                 true));
         BindValueChange(enableBattleHub, val => ModConfig.Instance.AppliedGameModes.BattleHubMatch = val == 0);
+        enableBattleHub.AddHook(new OnDisableReasonHookRequest(() =>
+            GameSingletonManager.BFlowManager?.m_flow_work.SceneId == app.constant.scn.Index.eBattleMain));
 
         var enableCustom = new UICustomOptionsValueNode(ENABLE_IN_CUSTOM,
             new OnOffSpinBoxOptionInitializer(
@@ -152,6 +164,8 @@ public static class ConfigOptionsMenu
                 ModConfig.Instance.AppliedGameModes.CustomRoomMatch,
                 true));
         BindValueChange(enableCustom, val => ModConfig.Instance.AppliedGameModes.CustomRoomMatch = val == 0);
+        enableCustom.AddHook(new OnDisableReasonHookRequest(() =>
+            GameSingletonManager.BFlowManager?.m_flow_work.SceneId == app.constant.scn.Index.eBattleMain));
 
         openAppliedGameModesSubmenu.AddChildren([
             enableRanked,

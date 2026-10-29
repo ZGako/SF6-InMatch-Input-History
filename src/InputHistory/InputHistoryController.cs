@@ -231,7 +231,6 @@ internal partial class InputHistoryClass
             var fightStatus = (nBattle.FIGHT_ST)fightStatusByte;
 
             if (fightStatus != s_instance._previousFightStatus)
-                // API.LogInfo($"Fight status changed from {s_instance._previousFightStatus} to {fightStatus}.");
                 // status changed
                 switch (fightStatus)
                 {

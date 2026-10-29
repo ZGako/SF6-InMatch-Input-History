@@ -13,6 +13,7 @@ using SF6_MIH.InputHistory;
 using SF6_Plugin_Core.Services;
 using SF6_Plugin_Core.UI;
 using SF6_Plugin_Core.UI.Localization;
+
 // Core usings
 
 namespace SF6_MIH;
@@ -21,9 +22,10 @@ public static class InMatchInputHistory
 {
     // actual class statics for the plugin
     private static InputHistoryClass? s_inputHistoryModule;
+    public static readonly string DirectoryPath = Path.Combine("reframework", "data", "SF6_InMatchInputHistory");
 
     private static readonly string LocalizationFilePath =
-        Path.Combine("reframework", "data", "SF6_InMatchInputHistory_Localization.json");
+        Path.Combine(DirectoryPath, "SF6_InMatchInputHistory_Localization.json");
 
     // NoInlining necessary for dynamic assembly resolution
     [MethodImpl(MethodImplOptions.NoInlining)]

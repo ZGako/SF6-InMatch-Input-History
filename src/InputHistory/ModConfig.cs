@@ -60,7 +60,7 @@ internal partial class ModConfigJsonContext : JsonSerializerContext
 public class ModConfig
 {
     private static readonly string ConfigFilePath =
-        Path.Combine("reframework", "data", "SF6_InMatchInputHistory_Config.json");
+        Path.Combine(InMatchInputHistory.DirectoryPath, "SF6_InMatchInputHistory_Config.json");
 
     public static ModConfig Instance { get; private set; } = new();
 
