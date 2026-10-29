@@ -40,8 +40,8 @@ public static class InMatchInputHistory
         GameSingletonManager.RegisterUIAgentManager(onReady: RegisterGuiHudCallback);
 
         GameSingletonManager.RegisterResourceManager(onReady: RegisterGuiHudCallback);
-
-        GameSingletonManager.RegisterNetworkManager(onReady: () => { });
+        
+        GameSingletonManager.RegisterOptionManager(onReady: ConfigOptionsMenu.Init, onLoadOverwrite: ConfigOptionsMenu.Unload);
     }
 
     // NoInlining necessary for dynamic assembly resolution
@@ -60,6 +60,8 @@ public static class InMatchInputHistory
 
         s_inputHistoryModule?.Dispose();
         s_inputHistoryModule = null;
+        
+        ConfigOptionsMenu.Unload();
 
         ModConfig.Clear();
     }
