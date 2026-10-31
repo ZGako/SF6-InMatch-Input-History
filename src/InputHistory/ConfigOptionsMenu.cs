@@ -308,6 +308,8 @@ public static class ConfigOptionsMenu
         {
             API.LogError($"Error unloading options menu: {e.Message}");
         }
+
+        _optionsModificationRequests.Clear();
     }
 
     [MethodHook(typeof(app.UIFlowOptionBGDialog.Param), "BeforeShowObject",
