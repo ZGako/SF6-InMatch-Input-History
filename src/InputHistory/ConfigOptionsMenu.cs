@@ -55,8 +55,6 @@ public static class ConfigOptionsMenu
 
     public static void Init()
     {
-        API.LogInfo("Initializing InputHistory config options menu");
-
         using var _ = LocalizationManager.UseFileScope("InMatchInputHistory");
 
         var openingInputHistorySettings = new UICustomOptionsGroupNode(OPEN_IH_SETTINGS_BUTTON,
@@ -292,7 +290,6 @@ public static class ConfigOptionsMenu
 
     public static void Unload()
     {
-        API.LogInfo("Unloading InputHistory config options menu");
         try
         {
             OptionsSettingsManager.ModifyUI(() =>

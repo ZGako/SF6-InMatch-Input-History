@@ -10,6 +10,7 @@ using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Runtime.Loader;
 using SF6_MIH.InputHistory;
+using SF6_Plugin_Core;
 using SF6_Plugin_Core.Services;
 using SF6_Plugin_Core.UI;
 using SF6_Plugin_Core.UI.Localization;
@@ -37,6 +38,7 @@ public static class InMatchInputHistory
 
         ModConfig.Load();
 
+        CoreLifecycle.OnCoreUnloading += PluginExitPoint;
 
         // Adjust the relative path if your JSON file is stored in a specific plugin subfolder
         LocalizationManager.LoadTranslations(LocalizationFilePath, "InMatchInputHistory");
@@ -54,6 +56,7 @@ public static class InMatchInputHistory
     [MethodImpl(MethodImplOptions.NoInlining)]
     private static void UnloadPlugin()
     {
+        CoreLifecycle.OnCoreUnloading -= PluginExitPoint;
         API.LogInfo("Unloading InMatchInputHistory C# plugin...");
         try
         {
