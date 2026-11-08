@@ -275,10 +275,7 @@ public static class ConfigOptionsMenu
         var appendToOptions = new OptionsAppendElementsRequest([(-1, openingInputHistorySettings)]);
         try
         {
-            OptionsSettingsManager.ModifyUI(() =>
-            {
-                OptionsSettingsManager.RegisterModification([1], appendToOptions);
-            });
+            OptionsSettingsManager.RegisterModification([1], appendToOptions);
         }
         catch (Exception e)
         {
@@ -292,11 +289,9 @@ public static class ConfigOptionsMenu
     {
         try
         {
-            OptionsSettingsManager.ModifyUI(() =>
-            {
-                foreach (var request in _optionsModificationRequests)
-                    OptionsSettingsManager.UnregisterModification(request);
-            });
+            foreach (var request in _optionsModificationRequests)
+                OptionsSettingsManager.UnregisterModification(request);
+
 
             ulong a = 0;
             OnExitBGDialog(ref a);
