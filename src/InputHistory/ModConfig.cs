@@ -104,6 +104,8 @@ public class ModConfig
 
     public static void Save()
     {
+        if (Instance == null) return;
+
         try
         {
             var directory = Path.GetDirectoryName(ConfigFilePath);

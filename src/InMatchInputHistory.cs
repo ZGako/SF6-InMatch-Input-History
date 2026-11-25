@@ -1,4 +1,4 @@
-﻿global using System;
+global using System;
 global using System.Collections.Generic;
 global using System.Runtime.InteropServices;
 global using System.Linq;
@@ -23,6 +23,8 @@ public static class InMatchInputHistory
 {
     // actual class statics for the plugin
     private static InputHistoryClass? s_inputHistoryModule;
+    private static int _isUnloaded;
+    private static int _hudCallbacksRegistered;
     public static readonly string DirectoryPath = Path.Combine("reframework", "data", "SF6_InMatchInputHistory");
 
     private static readonly string LocalizationFilePath =
@@ -57,6 +59,8 @@ public static class InMatchInputHistory
     private static void UnloadPlugin()
     {
         CoreLifecycle.OnCoreUnloading -= PluginExitPoint;
+        GameSingletonManager.UnregisterOptionManager(ConfigOptionsMenu.Init, ConfigOptionsMenu.Unload);
+        Volatile.Write(ref _hudCallbacksRegistered, 0);
         API.LogInfo("Unloading InMatchInputHistory C# plugin...");
         try
         {
@@ -79,11 +83,15 @@ public static class InMatchInputHistory
     {
         if (GameSingletonManager.UIAgentManager != null && GameSingletonManager.ResourceManager != null &&
             GameSingletonManager.BFlowManager != null)
+        {
+            if (Interlocked.CompareExchange(ref _hudCallbacksRegistered, 1, 0) != 0) return;
+
             GameSingletonManager.RegisterGuiManager(() =>
             {
                 //TODO: add part of the config here maybe?
                 BattleHudHooks.RegisterBattleHudSetupCallbacks(OnHudSetup, UnloadingHud);
             });
+        }
     }
 
     private static void OnHudSetup(app.BattleHudManager _)
@@ -131,6 +139,8 @@ public static class InMatchInputHistory
     [PluginEntryPoint]
     public static void PluginEntryPoint()
     {
+        Volatile.Write(ref _isUnloaded, 0);
+        Volatile.Write(ref _hudCallbacksRegistered, 0);
         var currentALC = AssemblyLoadContext.GetLoadContext(Assembly.GetExecutingAssembly());
         if (currentALC == null)
         {
@@ -146,6 +156,8 @@ public static class InMatchInputHistory
     [PluginExitPoint]
     public static void PluginExitPoint()
     {
+        if (Interlocked.Exchange(ref _isUnloaded, 1) == 1) return;
+
         try
         {
             UnloadPlugin();

@@ -44,9 +44,19 @@ internal partial class InputHistoryClass
 
         public void Dispose()
         {
-            _leftPanel.ScrollList.Visible = false;
-            _rightPanel.ScrollList.Visible = false;
-            _engineStringPool.Dispose();
+            try
+            {
+                _leftPanel.ScrollList.Visible = false;
+                _rightPanel.ScrollList.Visible = false;
+            }
+            catch (Exception ex)
+            {
+                API.LogWarning($"Exception hiding input history panels during Dispose: {ex.Message}");
+            }
+            finally
+            {
+                _engineStringPool.Dispose();
+            }
         }
 
         private void SetText(via.gui.Text textComponent, string message)

@@ -23,12 +23,31 @@ internal partial class InputHistoryClass : IDisposable
 
     public void Dispose()
     {
+        if (_disposed) return;
         _disposed = true;
-        _controller?.Dispose();
-        _view?.Dispose();
-        via.GameObject.destroy(_gameObjectMo?.As<via.GameObject>());
-        _gameObjectMo?.ReleaseIfGlobalized();
+
         ModConfig.OnConfigChanged -= OnLiveConfigChanged;
+        _controller?.Dispose();
+        _controller = null;
+        _view?.Dispose();
+        _view = null;
+
+        if (_gameObjectMo != null)
+        {
+            try
+            {
+                via.GameObject.destroy(_gameObjectMo.As<via.GameObject>());
+            }
+            catch (Exception ex)
+            {
+                API.LogWarning($"Exception destroying input history GameObject: {ex.Message}");
+            }
+            finally
+            {
+                _gameObjectMo.ReleaseIfGlobalized();
+                _gameObjectMo = null;
+            }
+        }
     }
 
     public void SetPreviewForceMode(PreviewForceMode mode)
@@ -48,21 +67,30 @@ internal partial class InputHistoryClass : IDisposable
 
         _gameObjectMo = prefabMo;
 
-        var uiAgentComponent = _gameObjectMo.As<via.GameObject>()
-            ?.getComponent(app.UIAgent.REFType.RuntimeType.As<_System.Type>());
-        var uiAgent = ManagedProxy<app.UIAgent>.Create(uiAgentComponent) ??
-                      throw new InvalidOperationException("Failed to retrieve UIAgent from the instantiated prefab.");
-
-        _view = new InputHistoryView(this, uiAgent);
-        _controller = new InputHistoryController(this, _isDummy);
-
-        if (_isDummy)
+        try
         {
-            uiAgent.Settings.Layer = app.UILayer.OnMenu;
-            _controller.ActivateDummyPreview();
-        }
+            var uiAgentComponent = _gameObjectMo.As<via.GameObject>()
+                ?.getComponent(app.UIAgent.REFType.RuntimeType.As<_System.Type>());
+            var uiAgent = ManagedProxy<app.UIAgent>.Create(uiAgentComponent) ??
+                          throw new InvalidOperationException("Failed to retrieve UIAgent from the instantiated prefab.");
 
-        ModConfig.OnConfigChanged += OnLiveConfigChanged;
+            _view = new InputHistoryView(this, uiAgent);
+            _controller = new InputHistoryController(this, _isDummy);
+            _controller.Start();
+
+            if (_isDummy)
+            {
+                uiAgent.Settings.Layer = app.UILayer.OnMenu;
+                _controller.ActivateDummyPreview();
+            }
+
+            ModConfig.OnConfigChanged += OnLiveConfigChanged;
+        }
+        catch (Exception ex)
+        {
+            API.LogError($"Exception initializing InputHistoryClass: {ex}");
+            Dispose();
+        }
     }
 
     private void OnLiveConfigChanged(ModConfig config)

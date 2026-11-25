@@ -90,10 +90,6 @@ internal partial class InputHistoryClass
                          throw new InvalidOperationException("Failed to retrieve Player 1 from cPlayer_Array1D.");
             _player2Mo = playerArray[1] as ManagedObject ??
                          throw new InvalidOperationException("Failed to retrieve Player 2 from cPlayer_Array1D.");
-
-            BattleHudHooks.RegisterBattleHudActivationCallbacks(Show, OnHudDeactivate);
-
-            s_instance = this;
         }
 
         // head versioning for each player, for when the input doesn't change and we need to +1 the current frame count
@@ -104,13 +100,19 @@ internal partial class InputHistoryClass
         public uint P1ShiftVersion { get; private set; } = 1;
         public uint P2ShiftVersion { get; private set; } = 1;
 
+        public void Start()
+        {
+            if (_isDummy) return;
+            s_instance = this;
+            BattleHudHooks.RegisterBattleHudActivationCallbacks(Show, OnHudDeactivate);
+        }
 
         public void Dispose()
         {
             if (!_isDummy)
             {
                 BattleHudHooks.UnregisterBattleHudCallbacks(onActivate: Show, onDeactivate: OnHudDeactivate);
-                s_instance = null;
+                if (ReferenceEquals(s_instance, this)) s_instance = null;
             }
         }
 
@@ -223,99 +225,104 @@ internal partial class InputHistoryClass
         public static void OnUpdateBehaviorCallback()
         {
             // Runs every frame before the engine update
-            if (s_instance == null) return;
-
-            // check the fight status to determine if we should be tracking inputs or not
-            var gameAddress = s_instance._gameMo!.GetAddress();
-            var fightStatusByte = (sbyte)Marshal.ReadByte((nint)FightStatusField!.GetDataRaw(gameAddress, false));
-            var fightStatus = (nBattle.FIGHT_ST)fightStatusByte;
-
-            if (fightStatus != s_instance._previousFightStatus)
-                // status changed
-                switch (fightStatus)
-                {
-                    case nBattle.FIGHT_ST.READY:
-                        s_instance.ResetHistory();
-                        // if it changed from something else to ready, reset the history
-                        break;
-                    case nBattle.FIGHT_ST.FINISH:
-                        // if it changed to finish, hide the UI as the game won't call Unload on its own for some reason
-                        s_instance.Hide();
-                        break;
-                    case nBattle.FIGHT_ST.STAGE_INIT:
-                    case nBattle.FIGHT_ST.ROUND_INIT:
-                    case nBattle.FIGHT_ST.APPEAR:
-                    case nBattle.FIGHT_ST.NOW:
-                    case nBattle.FIGHT_ST.WIN_WAIT:
-                    case nBattle.FIGHT_ST.WIN:
-                        // keep them separate just in case I want to add something later
-                        break;
-                }
-
-            s_instance._previousFightStatus = fightStatus;
-
-            // double check for ease
-            if (fightStatus != nBattle.FIGHT_ST.READY && fightStatus != nBattle.FIGHT_ST.NOW) return;
-
-            // pause check
-            if (s_instance._battleSystem!._IsPause) return;
-
-            var p1Addr = s_instance._player1Mo!.GetAddress();
-            var p2Addr = s_instance._player2Mo!.GetAddress();
-
-            var p1_input_new = (ushort)Marshal.ReadInt16((nint)InputNewField!.GetDataRaw(p1Addr, false));
-            // ushort p1_input_old = (ushort)Marshal.ReadInt16((nint)s_inputOldField!.GetDataRaw(p1Addr, false));
-            ref var p1_input_old = ref GetInputFromNewest(s_instance._p1InputBuffer, s_instance._p1HeadIndex, 0);
-
-            var p2_input_new = (ushort)Marshal.ReadInt16((nint)InputNewField!.GetDataRaw(p2Addr, false));
-            // ushort p2_input_old = (ushort)Marshal.ReadInt16((nint)s_inputOldField!.GetDataRaw(p2Addr, false));
-            ref var p2_input_old = ref GetInputFromNewest(s_instance._p2InputBuffer, s_instance._p2HeadIndex, 0);
-
-            if (p1_input_new == p1_input_old.InputValue)
-            {
-                // input stayed the same, increment the frame count of the current head
-                if (p1_input_old.FrameCount < 99)
-                {
-                    s_instance.P1HeadVersion++;
-                    p1_input_old.FrameCount++;
-                }
-            }
-            else
-            {
-                // input changed, shift the history down and add the new input to the head
-                s_instance.P1ShiftVersion++;
-                s_instance._p1HeadIndex = (s_instance._p1HeadIndex + 1) % s_instance._p1InputBuffer.Length;
-                ref var head = ref GetInputFromNewest(s_instance._p1InputBuffer, s_instance._p1HeadIndex, 0);
-                head.FrameCount = 1;
-                head.InputValue = p1_input_new;
-            }
-
-            if (p2_input_new == p2_input_old.InputValue)
-            {
-                // input stayed the same, increment the frame count of the current head
-                if (p2_input_old.FrameCount < 99)
-                {
-                    s_instance.P2HeadVersion++;
-                    p2_input_old.FrameCount++;
-                }
-            }
-            else
-            {
-                // input changed, shift the history down and add the new input to the head
-                s_instance.P2ShiftVersion++;
-                s_instance._p2HeadIndex = (s_instance._p2HeadIndex + 1) % s_instance._p2InputBuffer.Length;
-                ref var head = ref GetInputFromNewest(s_instance._p2InputBuffer, s_instance._p2HeadIndex, 0);
-                head.FrameCount = 1;
-                head.InputValue = p2_input_new;
-            }
+            var instance = s_instance;
+            if (instance == null) return;
 
             try
             {
-                s_instance._parent._view?.UpdateUI();
+                // check the fight status to determine if we should be tracking inputs or not
+                var gameAddress = instance._gameMo?.GetAddress() ?? 0;
+                if (gameAddress == 0 || !ManagedObject.IsManagedObject(gameAddress)) return;
+
+                var fightStatusByte = (sbyte)Marshal.ReadByte((nint)FightStatusField!.GetDataRaw(gameAddress, false));
+                var fightStatus = (nBattle.FIGHT_ST)fightStatusByte;
+
+                if (fightStatus != instance._previousFightStatus)
+                    // status changed
+                    switch (fightStatus)
+                    {
+                        case nBattle.FIGHT_ST.READY:
+                            instance.ResetHistory();
+                            // if it changed from something else to ready, reset the history
+                            break;
+                        case nBattle.FIGHT_ST.FINISH:
+                            // if it changed to finish, hide the UI as the game won't call Unload on its own for some reason
+                            instance.Hide();
+                            break;
+                        case nBattle.FIGHT_ST.STAGE_INIT:
+                        case nBattle.FIGHT_ST.ROUND_INIT:
+                        case nBattle.FIGHT_ST.APPEAR:
+                        case nBattle.FIGHT_ST.NOW:
+                        case nBattle.FIGHT_ST.WIN_WAIT:
+                        case nBattle.FIGHT_ST.WIN:
+                            // keep them separate just in case I want to add something later
+                            break;
+                    }
+
+                instance._previousFightStatus = fightStatus;
+
+                // double check for ease
+                if (fightStatus != nBattle.FIGHT_ST.READY && fightStatus != nBattle.FIGHT_ST.NOW) return;
+
+                // pause check
+                if (instance._battleSystem!._IsPause) return;
+
+                var p1Addr = instance._player1Mo?.GetAddress() ?? 0;
+                var p2Addr = instance._player2Mo?.GetAddress() ?? 0;
+                if (p1Addr == 0 || !ManagedObject.IsManagedObject(p1Addr) ||
+                    p2Addr == 0 || !ManagedObject.IsManagedObject(p2Addr)) return;
+
+                var p1_input_new = (ushort)Marshal.ReadInt16((nint)InputNewField!.GetDataRaw(p1Addr, false));
+                // ushort p1_input_old = (ushort)Marshal.ReadInt16((nint)s_inputOldField!.GetDataRaw(p1Addr, false));
+                ref var p1_input_old = ref GetInputFromNewest(instance._p1InputBuffer, instance._p1HeadIndex, 0);
+
+                var p2_input_new = (ushort)Marshal.ReadInt16((nint)InputNewField!.GetDataRaw(p2Addr, false));
+                // ushort p2_input_old = (ushort)Marshal.ReadInt16((nint)s_inputOldField!.GetDataRaw(p2Addr, false));
+                ref var p2_input_old = ref GetInputFromNewest(instance._p2InputBuffer, instance._p2HeadIndex, 0);
+
+                if (p1_input_new == p1_input_old.InputValue)
+                {
+                    // input stayed the same, increment the frame count of the current head
+                    if (p1_input_old.FrameCount < 99)
+                    {
+                        instance.P1HeadVersion++;
+                        p1_input_old.FrameCount++;
+                    }
+                }
+                else
+                {
+                    // input changed, shift the history down and add the new input to the head
+                    instance.P1ShiftVersion++;
+                    instance._p1HeadIndex = (instance._p1HeadIndex + 1) % instance._p1InputBuffer.Length;
+                    ref var head = ref GetInputFromNewest(instance._p1InputBuffer, instance._p1HeadIndex, 0);
+                    head.FrameCount = 1;
+                    head.InputValue = p1_input_new;
+                }
+
+                if (p2_input_new == p2_input_old.InputValue)
+                {
+                    // input stayed the same, increment the frame count of the current head
+                    if (p2_input_old.FrameCount < 99)
+                    {
+                        instance.P2HeadVersion++;
+                        p2_input_old.FrameCount++;
+                    }
+                }
+                else
+                {
+                    // input changed, shift the history down and add the new input to the head
+                    instance.P2ShiftVersion++;
+                    instance._p2HeadIndex = (instance._p2HeadIndex + 1) % instance._p2InputBuffer.Length;
+                    ref var head = ref GetInputFromNewest(instance._p2InputBuffer, instance._p2HeadIndex, 0);
+                    head.FrameCount = 1;
+                    head.InputValue = p2_input_new;
+                }
+
+                instance._parent._view?.UpdateUI();
             }
             catch (Exception ex)
             {
-                API.LogError($"Error updating input history UI: {ex.Message}");
+                API.LogError($"Error updating input history: {ex.Message}");
             }
         }
 
@@ -418,28 +425,35 @@ internal partial class InputHistoryClass
 
         private void Show(BattleHudManager _)
         {
-            if (_firstActivation)
+            try
             {
-                var player1 = _battleSetting!.Player1P();
-                var player2 = _battleSetting.Player2P();
-
-                _p1CommandType = player1.CommandType;
-                _p2CommandType = player2.CommandType;
-                _p1IsCpu = player1.IsCPU;
-                _p2IsCpu = player2.IsCPU;
-                _isOnline = _battleSetting.IsOnline;
-
-                if (_isOnline)
+                if (_firstActivation)
                 {
-                    var selfInfo = GameSingletonManager.NetworkManager?.Session?.FGBattle?.SelfBattleMemberInfo;
-                    if (selfInfo != null) _onlineSelfPlayerIndex = selfInfo.MemberIndex == 0 ? 0 : 1;
+                    var player1 = _battleSetting!.Player1P();
+                    var player2 = _battleSetting.Player2P();
+
+                    _p1CommandType = player1.CommandType;
+                    _p2CommandType = player2.CommandType;
+                    _p1IsCpu = player1.IsCPU;
+                    _p2IsCpu = player2.IsCPU;
+                    _isOnline = _battleSetting.IsOnline;
+
+                    if (_isOnline)
+                    {
+                        var selfInfo = GameSingletonManager.NetworkManager?.Session?.FGBattle?.SelfBattleMemberInfo;
+                        if (selfInfo != null) _onlineSelfPlayerIndex = selfInfo.MemberIndex == 0 ? 0 : 1;
+                    }
+
+                    ApplyConfig(ModConfig.Instance);
+                    _firstActivation = false;
                 }
 
-                ApplyConfig(ModConfig.Instance);
-                _firstActivation = false;
+                _parent._view?.Show();
             }
-
-            _parent._view?.Show();
+            catch (Exception ex)
+            {
+                API.LogError($"Error showing input history: {ex.Message}");
+            }
         }
 
         private void Hide()
